@@ -21,6 +21,7 @@ class Config:
     token_file: Path = field(default_factory=lambda: _home(".config/uplink/token"))
     audit_log: Path = field(default_factory=lambda: _home(".local/state/uplink/audit.log"))
     protected: tuple[str, ...] = ("judy",)
+    protected_projects: tuple[str, ...] = ("Judy",)
     disk_mounts: tuple[str, ...] = ("/", "/home")
     command_timeout_seconds: int = 900
     d_command: str = "d"
@@ -31,7 +32,7 @@ class ConfigError(Exception):
 
 
 _PATH_KEYS = {"projects_dir", "socket_path", "token_file", "audit_log"}
-_LIST_KEYS = {"protected", "disk_mounts"}
+_LIST_KEYS = {"protected", "protected_projects", "disk_mounts"}
 
 
 def _coerce(key: str, value):
