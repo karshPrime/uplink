@@ -12,3 +12,4 @@
 * docs/agent-skill: skills.md, a guide for agents on calling Uplink's routes and handling its errors.
 * fix/devenv-projects: projects and their containers are found where devenv keeps their compose files, so agents can control them.
 * feature/service-make-targets: make start, make stop and make restart run and control the host service.
+* chore/template-v4: template-python v4.0.0; versions come from the release tags, so there is no VERSION file to bump.
