@@ -18,6 +18,8 @@ def _home(relative: str) -> Path:
 class Config:
     projects_dir: Path = field(default_factory=lambda: _home("Blackwall"))
     envs_dir: Path = field(default_factory=lambda: _home(".local/blackice/devenv"))
+    soul_dir: Path = field(default_factory=lambda: _home("Blackwall/Judy/flush"))
+    allowed_repo_owners: tuple[str, ...] = ("karshPrime",)
     socket_path: Path = field(
         default_factory=lambda: _home(".local/state/uplink/uplink.sock")
     )
@@ -36,8 +38,15 @@ class ConfigError(Exception):
     pass
 
 
-_PATH_KEYS = {"projects_dir", "envs_dir", "socket_path", "token_file", "audit_log"}
-_LIST_KEYS = {"protected", "protected_projects", "disk_mounts"}
+_PATH_KEYS = {
+    "projects_dir",
+    "envs_dir",
+    "soul_dir",
+    "socket_path",
+    "token_file",
+    "audit_log",
+}
+_LIST_KEYS = {"protected", "protected_projects", "disk_mounts", "allowed_repo_owners"}
 
 
 def _coerce(key: str, value):

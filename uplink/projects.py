@@ -17,9 +17,6 @@ if TYPE_CHECKING:
 PROJECT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 COMPOSE_FILE = "compose.yaml"
 OUTPUT_LIMIT = 64 * 1024
-GITHUB_REPO_URL = re.compile(
-    r"https://github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9][A-Za-z0-9._-]*?)(?:\.git)?/?"
-)
 
 
 def valid_project_name(name: str) -> bool:
@@ -31,15 +28,16 @@ def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9_-]+", "-", name.lower()).strip("-")
 
 
-def _env_project_root(env_dir: Path) -> Path | None:
+def env_value(env_dir: Path, key: str) -> str | None:
+    """A value from the .env devenv writes beside each project's compose file."""
     try:
         lines = (env_dir / ".env").read_text().splitlines()
     except OSError:
         return None
     for line in lines:
-        key, sep, value = line.partition("=")
-        if sep and key == "PROJECT_ROOT":
-            return Path(value)
+        name, sep, value = line.partition("=")
+        if sep and name == key:
+            return value
     return None
 
 
@@ -47,10 +45,10 @@ def project_for_env(env_dir: Path, config: Config) -> str | None:
     """The project a devenv folder belongs to, when its .env names exactly one."""
     if not (env_dir / COMPOSE_FILE).is_file():
         return None
-    root = _env_project_root(env_dir)
-    if root is None or root.is_symlink():
+    value = env_value(env_dir, "PROJECT_ROOT")
+    if not value or Path(value).is_symlink():
         return None
-    root = root.resolve()
+    root = Path(value).resolve()
     if root.parent != config.projects_dir.resolve() or not root.is_dir():
         return None
     if not valid_project_name(root.name) or slugify(root.name) != env_dir.name:
@@ -103,18 +101,6 @@ class Projects:
         if is_protected_project(name, self.config):
             raise UplinkError(403, "protected", f"{name} is protected")
         return path
-
-    def fork(self, name: str, url: str) -> dict:
-        if not valid_project_name(name):
-            raise UplinkError(400, "invalid_name", f"not a project name: {name!r}")
-        if not GITHUB_REPO_URL.fullmatch(url):
-            raise UplinkError(
-                400, "invalid_url", f"not a GitHub repository URL: {url!r}"
-            )
-        target = self.config.projects_dir / name
-        if target.exists() or target.is_symlink():
-            raise UplinkError(409, "already_exists", f"{target} already exists")
-        raise UplinkError(501, "not_implemented", "forking is not built yet")
 
     def _names(self) -> list[str]:
         root = self.config.projects_dir

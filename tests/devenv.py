@@ -16,9 +16,13 @@ def make_project(
     return path
 
 
-def make_env(config: Config, slug: str, project_root: Path) -> Path:
+def make_env(
+    config: Config, slug: str, project_root: Path, character: str = ""
+) -> Path:
     env_dir = config.envs_dir / slug
     env_dir.mkdir(parents=True, exist_ok=True)
     (env_dir / "compose.yaml").write_text("services: {}\n")
-    (env_dir / ".env").write_text(f"PROJECT_SLUG={slug}\nPROJECT_ROOT={project_root}\n")
+    (env_dir / ".env").write_text(
+        f"PROJECT_SLUG={slug}\nPROJECT_ROOT={project_root}\nCHARACTER={character}\n"
+    )
     return env_dir
