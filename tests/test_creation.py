@@ -299,6 +299,26 @@ def test_needs_d(client, auth, made, runs, monkeypatch):
     assert response.json()["error"] == "d_unavailable"
 
 
+def test_lists_characters(client, auth, made, config, tmp_path):
+    for name, character in [("Judy", "Judy"), ("blog", "")]:
+        project = config.projects_dir / name
+        (project / "main").mkdir(parents=True)
+        make_env(config, slugify(name), project_root=project, character=character)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (config.envs_dir / "sneaky").symlink_to(config.envs_dir / "judy")
+    assert client.get("/characters", headers=auth).json() == {
+        "characters": [
+            {"project": "blog", "character": None},
+            {"project": "Judy", "character": "Judy"},
+        ]
+    }
+
+
+def test_characters_need_a_token(client, made):
+    assert client.get("/characters").status_code == 401
+
+
 def test_creation_is_audited(client, auth, made, runs, config):
     job = create(client, auth).json()
     record = json.loads(config.audit_log.read_text().splitlines()[-1])

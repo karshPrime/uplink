@@ -38,3 +38,8 @@ def create_project(request: Request, body: CreateProject):
 @router.get("/jobs/{job_id}")
 def get_job(request: Request, job_id: str):
     return creation(request).get(job_id).as_dict()
+
+
+@router.get("/characters")
+def list_characters(request: Request):
+    return {"characters": creation(request).characters()}
