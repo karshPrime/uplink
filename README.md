@@ -74,7 +74,9 @@ addressing a container by ID does not get round them.
 | GET    | `/projects`           | folders in `projects_dir` that devenv set up, and their containers |
 | POST   | `/projects/{name}/up` | `d up` in the project folder                          |
 | POST   | `/projects/{name}/down` | `d down` in the project folder                      |
-| POST   | `/projects/fork`      | fork a repository into a new project (not built yet)  |
+| POST   | `/projects`           | create a project with `d init`, as a job; answers `202` |
+| GET    | `/jobs/{id}`          | a creation job's state, step and output              |
+| GET    | `/characters`         | each project and the character it plays              |
 
 Projects are set up by devenv, from [agent-base](https://github.com/karshosphere/agent-base).
 A project name must match `^[A-Za-z0-9][A-Za-z0-9._-]*$` and be a real folder
@@ -85,10 +87,35 @@ as devenv names it, and the `.env` beside it must give that folder as
 Projects in `protected_projects` are listed, marked `"protected": true`, but
 `up` and `down` on them get `403 protected`.
 
-`/projects/fork` takes `{"name": "<folder>", "url": "https://github.com/<owner>/<repo>"}`.
-The name follows the rules above and must not exist yet; the URL must be a plain
-HTTPS GitHub repository URL. A valid request currently gets
-`501 not_implemented`; the forking itself comes later.
+### Creating projects
+
+`POST /projects` takes `{"name": "<folder>", "fork": "<owner>/<repo>", "character": "<name>"}`,
+or `repo` in place of `fork` for a repository that is not a fork. It answers
+`202` with a job, and `GET /jobs/{id}` follows it through its steps: `init`
+runs `d init` to clone the repository as `main/` and render the project from
+agent-base, `soul` puts the soul in place, and `commit` commits it. The job is
+`queued`, `running`, `done` or `failed`, and a failed job names the step it
+stopped at and leaves what it made in place. The new container is left stopped.
+
+Before a job is queued, the request is refused when:
+
+- the repository's owner is not in `allowed_repo_owners` (`403 owner_not_allowed`),
+- the name already exists in `projects_dir` or `envs_dir` (`409 already_exists`),
+- another project already plays that character, as recorded in its `.env` by
+  devenv (`409 character_taken`), or
+- there is no soul at `soul_dir/<name>_soul.md`, or it is a symlink, not a
+  regular file, over 64 KiB or not UTF-8 (`404 soul_not_found`, `400 invalid_soul`).
+
+The soul is read once, when the request arrives, and never through a symlink: the
+soul folder belongs to an agent, which could otherwise point it at a secret.
+Uplink builds every argument to `d init` itself, and passes it only its own
+`projects_dir` and `envs_dir`, so a request cannot choose the template, the mounts
+or the capabilities of the new container; devenv renders the compose file from
+agent-base into `envs_dir`, as for any project. Creations run one at a time, and
+jobs are kept in memory, so a restart of Uplink forgets them.
+
+`GET /characters` lists each project with the character devenv recorded for it,
+or `null` when it has none.
 
 Judy lives in `~/Blackwall/Judy/` like any other project. devenv keeps every
 compose file in `envs_dir`, which no container mounts, so nothing that can reach
@@ -137,6 +164,8 @@ is optional; unknown keys stop the service from starting.
 ```toml
 projects_dir = "~/Blackwall"
 envs_dir     = "~/.local/blackice/devenv"
+soul_dir     = "~/Blackwall/Judy/flush"
+allowed_repo_owners = ["karshPrime"]
 socket_path  = "~/.local/state/uplink/uplink.sock"
 token_file   = "~/.config/uplink/token"
 audit_log    = "~/.local/state/uplink/audit.log"

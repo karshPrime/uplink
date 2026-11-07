@@ -98,7 +98,9 @@ compose file lives on the host, out of every container's reach.
 | `GET /projects` | lists projects: `name`, `path`, `protected`, and `containers` (each with `name`, `state`, `status`) |
 | `POST /projects/{name}/up` | runs `d up` in the project folder |
 | `POST /projects/{name}/down` | runs `d down` in the project folder |
-| `POST /projects/fork` | not built yet; see below |
+| `POST /projects` | creates a new project, as a job; see below |
+| `GET /jobs/{id}` | how a creation job is going |
+| `GET /characters` | each project and the character it plays |
 
 `up` and `down` answer only when the command finishes, which can take several
 minutes while images build. Give the request a long timeout, longer than the
@@ -130,22 +132,54 @@ The response tells you how it went:
 - Project names must match `^[A-Za-z0-9][A-Za-z0-9._-]*$`. Protected projects
   are listed with `"protected": true`, and `up` or `down` on them is refused.
 
-`POST /projects/fork` takes `{"name": "<folder>", "url": "https://github.com/<owner>/<repo>"}`.
-It checks the name and URL and then answers `501 not_implemented`, because the
-forking itself does not exist yet. Do not rely on it. The body must be sent as
-JSON:
+### Creating a project
+
+Write the new agent's soul first, to `~/Blackwall/Judy/flush/<name>_soul.md`. Then
+check the character is free with `GET /characters`, and ask for the project:
 
 ```sh
-uplink POST /projects/fork -H 'Content-Type: application/json' \
-       -d '{"name": "newthing", "url": "https://github.com/someone/newthing"}'
+uplink POST /projects -H 'Content-Type: application/json' \
+       -d '{"name": "Bartmoss", "fork": "karshPrime/agent-bartmoss", "character": "Bartmoss"}'
 ```
+
+Use `repo` in place of `fork` for a repository that is not a fork. Only
+repositories of the owners the host allows are accepted. The answer is `202` with
+a job; poll it until it is `done` or `failed`:
+
+```sh
+uplink GET /jobs/<id>
+```
+
+```json
+{"id": "...", "project": "Bartmoss", "state": "running", "step": "init",
+ "output": "...", "created_at": "...", "finished_at": null}
+```
+
+- `state` is `queued`, `running`, `done` or `failed`; `step` is `init`, `soul` or
+  `commit` while it runs, and on failure names the step that failed.
+- `output` holds the tail of what the job printed; read it when a job fails.
+- A failed job leaves the half-made project in place. Report it rather than
+  asking again: the name is now taken.
+- The new project's container is left stopped. Use `ensure-running` to start it.
+- The soul is read when you ask, so changing the file afterwards changes nothing.
+  It must be a plain file, not a symlink, and at most 64 KiB.
+- Jobs live in memory, so they are gone if Uplink restarts. `GET /projects` still
+  shows whether the project was made.
+
+`GET /characters` answers `{"characters": [{"project": "Judy", "character": "Judy"}, ...]}`,
+with `null` for a project that plays no character.
 
 ## Errors
 
 | Status | `error` | Meaning | What to do |
 | --- | --- | --- | --- |
 | 400 | `invalid_name` | not a valid container or project name | fix the name; do not retry as is |
-| 400 | `invalid_url` | fork URL is not `https://github.com/<owner>/<repo>` | fix the URL |
+| 400 | `invalid_repo` | not exactly one of `fork` or `repo`, or not `<owner>/<repo>` | fix the request |
+| 400 | `invalid_character` | the character is not 1 to 40 letters, spaces, `.`, `'` or `-`, starting with a letter | pick another |
+| 400 | `invalid_soul` | the soul file is a symlink, not a regular file, over 64 KiB or not UTF-8 | rewrite it as a plain file |
+| 403 | `owner_not_allowed` | the host does not allow cloning that owner's repositories | use an allowed owner, or report it |
+| 404 | `soul_not_found` | there is no `<name>_soul.md` in the soul folder | write the soul first |
+| 404 | `job_not_found` | no job with that id, or Uplink restarted | check `GET /projects` instead |
 | 401 | `unauthorised` | token missing or wrong | check `UPLINK_TOKEN` is set and sent |
 | 403 | `protected` | the container or project is protected | stop; this is deliberate |
 | 403 | `not_a_project` | the container does not belong to a project in `~/Blackwall` | stop; Uplink will never control it |
@@ -155,9 +189,9 @@ uplink POST /projects/fork -H 'Content-Type: application/json' \
 | 404 | `not_found` | no such route | check the path against this guide |
 | 405 | `method_not_allowed` | wrong HTTP method for the route | check GET or POST |
 | 409 | `busy` | an `up` or `down` is already running on that project | wait for it to finish, then try again |
-| 409 | `already_exists` | the fork target folder already exists | pick another name |
+| 409 | `already_exists` | a project, or a creation in progress, already has that name | pick another name |
+| 409 | `character_taken` | another project already plays that character | pick another character |
 | 422 | `invalid_request` | the request body is malformed or has unknown fields | fix the body |
-| 501 | `not_implemented` | the route exists but does nothing yet | do not retry |
 | 502 | `docker_error` | Docker refused the action | read `detail`; retrying the same action rarely helps |
 | 503 | `docker_unavailable` | Uplink cannot reach Docker | wait and try once more; report it if it persists |
 | 503 | `d_unavailable` | the host's `d` script cannot be found | report it; nothing on your side will fix it |
